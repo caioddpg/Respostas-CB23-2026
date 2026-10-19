@@ -29,7 +29,13 @@ from fornecido.cronometro import cronometrar
 #: dígitos) e `resto` (o restante da linha, começando por um caractere que não é espaço).
 #: As partes são separadas por um ou mais espaços. A linha inteira deve casar: o padrão é
 #: aplicado com `LINHA.fullmatch(linha)`.
-LINHA: re.Pattern = None  # type: ignore[assignment]  # TODO issue #1
+LINHA: re.Pattern = re.compile(r"""
+    (?P<data>\d{4}-\d{2}-\d{2}) \s+
+    (?P<hora>\d{2}:\d{2}:\d{2}) \s+
+    (?P<nivel>INFO|WARN|ALARME) \s+
+    (?P<tag>[A-Z]{1,2}\d{1,3}) \s+
+    (?P<resto>\S.*)
+    """,re.VERBOSE)  # type: ignore[assignment]  # TODO issue #1
 
 
 @dataclass(frozen=True)
@@ -48,7 +54,10 @@ def valida_tag(s: str) -> bool:
     Use `fullmatch`. Válidas: `"PT101"`, `"FT201"`, `"B1"`. Inválidas: `"pt101"`, `"PT"`,
     `"PT1010"`, `"101PT"` e `"PT101 "` (sobra de caracteres).
     """
-    raise NotImplementedError("issue #1: valida_tag")
+    if re.fullmatch(r"[A-Z]{1,2}\d{1,3}", s) is None:
+        return False
+    return True
+
 
 
 def ler_log(texto: str) -> tuple[list[Registro], list[str]]:
@@ -69,6 +78,34 @@ def ler_log(texto: str) -> tuple[list[Registro], list[str]]:
       (`contagens=1623` vira `1623.0`; `evento=partida` continua `"partida"`);
     - texto vazio devolve `([], [])`.
     """
+    registros = []
+    invalidas = []
+    for l in texto.splitlines():
+        linha = l.strip()
+        if linha =="":
+            continue
+        if LINHA.fullmatch(linha) is None:
+            invalidas.append(linha)
+            continue
+
+        dados = LINHA.fullmatch(linha).groupdict()
+
+        try:
+            momento = datetime.strptime(
+                f"{dados["data"]} {dados["hora"]}", "%Y-%m-%d %H:%M:%S"
+            )
+        except ValueError:
+            invalidas.append(linhas)
+            continue
+
+
+        registros.append(Registro(
+            instante = momento,
+            nivel = dados["nivel"],
+            tag = dados["tag"]
+            valores = valores
+        ))
+
     raise NotImplementedError("issue #1: ler_log")
 
 
@@ -83,6 +120,8 @@ def contagem_por_tag(registros: list[Registro]) -> dict[str, int]:
     Use uma compreensão de dicionário sobre o conjunto das tags, obtido por uma compreensão
     de conjunto. Lista vazia devolve `{}`.
     """
+    conjunto_tags = {r.tag for r in registros}
+    dict_tag = {tag:sum([r.tag == t for r in registros]) for t in conjunto_tags}
     raise NotImplementedError("issue #1: contagem_por_tag")
 
 
@@ -104,6 +143,10 @@ def criar_conversores(escalas: dict[str, float]) -> dict[str, Callable[[float], 
     Cada `f` é uma lambda. Cuidado com o *late binding*: cada função deve usar o fator da
     sua tag, e não o último fator do dicionário (veja a issue #2 no enunciado).
     """
+    funcoes = {}
+    for c in escalas:
+        funcoes[c] = lambda x, chave = c : escalas[chave]*x
+    return funcoes
     raise NotImplementedError("issue #2: criar_conversores")
 
 
@@ -123,21 +166,36 @@ def medir_memoria(contagens: np.ndarray) -> dict[str, int]:
 
     Levanta `ValueError` se `contagens` não for um ndarray 1D de inteiros.
     """
+    if (not isinstance(contagens, np.ndarray) or contagens.ndim != 1 or not np.issubtype(contagens.dtype, np.integer)):
+        raise ValueError
+    memoria = {}
+    lista = contagens.tolist()
+    memoria["list"] = sys.getsizeof(contagens.tolist()) + sum([sys.getsizeof(x) for x in lista])
+
+    arr = array.array("H",contagens)
+    memoria["array(H)"]
+
     raise NotImplementedError("issue #3: medir_memoria")
 
 
 def converter_laco(contagens: list[int]) -> list[float]:
     """Converte contagens em kPa (`c * 600 / 4095`) com `for` e `append`."""
+    resultado = []
+    for c in contagens:
+        resultado.append(c * 600 / 4095)
+        return resultado
     raise NotImplementedError("issue #3: converter_laco")
 
 
 def converter_compreensao(contagens: list[int]) -> list[float]:
     """Converte contagens em kPa (`c * 600 / 4095`) com uma compreensão de lista."""
+    return [c * 600 / 4095 for c in contagens]
     raise NotImplementedError("issue #3: converter_compreensao")
 
 
 def converter_map(contagens: list[int]) -> list[float]:
     """Converte contagens em kPa (`c * 600 / 4095`) com `map` e uma lambda."""
+
     raise NotImplementedError("issue #3: converter_map")
 
 
