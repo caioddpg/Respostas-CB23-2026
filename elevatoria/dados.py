@@ -95,14 +95,24 @@ def ler_log(texto: str) -> tuple[list[Registro], list[str]]:
                 f"{dados["data"]} {dados["hora"]}", "%Y-%m-%d %H:%M:%S"
             )
         except ValueError:
-            invalidas.append(linhas)
+            invalidas.append(linha)
             continue
+
+        pares = re.findall(r"(\w+)=(\S+)")
+        valores = {}
+        for chaves, valor in pares:
+            try:
+                val = float(valor)
+            except ValueError:
+                val = valor
+
+            valores[chaves] = val
 
 
         registros.append(Registro(
             instante = momento,
             nivel = dados["nivel"],
-            tag = dados["tag"]
+            tag = dados["tag"],
             valores = valores
         ))
 
@@ -131,6 +141,16 @@ def serie(registros: list[Registro], tag: str, chave: str) -> SerieTemporal:
     Os registros da tag sem essa chave (por exemplo, os alarmes de PT102, que não têm
     `contagens`) são ignorados. Crie a série com `SerieTemporal.de_lista`.
     """
+    valores = []
+    for r in registros:
+        if r.tag == tag and chave in r.valores:
+            valores.append(r.valores[chave])
+
+    # val = [r.valores[chave] for r in registros if r.tag == tag and chave in r.valores]
+
+
+    return SerieTemporal.de_lista(valores)
+
     raise NotImplementedError("issue #1: serie")
 
 
@@ -143,11 +163,11 @@ def criar_conversores(escalas: dict[str, float]) -> dict[str, Callable[[float], 
     Cada `f` é uma lambda. Cuidado com o *late binding*: cada função deve usar o fator da
     sua tag, e não o último fator do dicionário (veja a issue #2 no enunciado).
     """
+
     funcoes = {}
     for c in escalas:
-        funcoes[c] = lambda x, chave = c : escalas[chave]*x
+        funcoes[c] = lambda x, chave=c : escalas[chave]*x
     return funcoes
-    raise NotImplementedError("issue #2: criar_conversores")
 
 
 # ---------------------------------------------------------------------------------------
@@ -166,42 +186,54 @@ def medir_memoria(contagens: np.ndarray) -> dict[str, int]:
 
     Levanta `ValueError` se `contagens` não for um ndarray 1D de inteiros.
     """
-    if (not isinstance(contagens, np.ndarray) or contagens.ndim != 1 or not np.issubtype(contagens.dtype, np.integer)):
-        raise ValueError
+
+    if (not isinstance(contagens, np.ndarray)
+        or contagens.ndim != 1
+        or not np.issubdtype(contagens.dtype, np.integer)):
+        raise ValueError("contagens deve ser um ndarray 1D de inteiros")
+
     memoria = {}
     lista = contagens.tolist()
     memoria["list"] = sys.getsizeof(contagens.tolist()) + sum([sys.getsizeof(x) for x in lista])
 
-    arr = array.array("H",contagens)
-    memoria["array(H)"]
+    arr = array.array("H", contagens)
+    memoria["array('H')"] = arr.itemsize*len(arr)
 
-    raise NotImplementedError("issue #3: medir_memoria")
+    tipos = [
+            ("uint16", np.uint16), 
+            ("int32", np.int32),
+            ("int64", np.int64),
+            ("float32", np.float32),
+            ("float64", np.float64)
+            ]
+    
+    for chave,t in tipos:
+        arr_t = contagens.astype(t)
+        memoria[chave] = arr_t.itemsize * len(arr_t)
+    return memoria
 
 
 def converter_laco(contagens: list[int]) -> list[float]:
     """Converte contagens em kPa (`c * 600 / 4095`) com `for` e `append`."""
     resultado = []
     for c in contagens:
-        resultado.append(c * 600 / 4095)
-        return resultado
-    raise NotImplementedError("issue #3: converter_laco")
+        resultado.append(c*600/4095)
+    return resultado
 
 
 def converter_compreensao(contagens: list[int]) -> list[float]:
     """Converte contagens em kPa (`c * 600 / 4095`) com uma compreensão de lista."""
-    return [c * 600 / 4095 for c in contagens]
-    raise NotImplementedError("issue #3: converter_compreensao")
+    return [c*600/4095 for c in contagens]
 
 
 def converter_map(contagens: list[int]) -> list[float]:
     """Converte contagens em kPa (`c * 600 / 4095`) com `map` e uma lambda."""
-
-    raise NotImplementedError("issue #3: converter_map")
+    return list(map(lambda c: c*600/4095, contagens))
 
 
 def converter_vetorizado(contagens: np.ndarray) -> np.ndarray:
     """Converte contagens em kPa (`c * 600 / 4095`) com uma operação vetorizada do NumPy."""
-    raise NotImplementedError("issue #3: converter_vetorizado")
+    return contagens*600/4095
 
 
 def medir_tempos(contagens: np.ndarray, k: int = 10) -> dict[str, float]:
@@ -211,4 +243,9 @@ def medir_tempos(contagens: np.ndarray, k: int = 10) -> dict[str, float]:
     `"map+lambda"` (que recebem a lista `contagens.tolist()`, criada uma única vez, fora da
     medição) e `"vetorizado"` (que recebe o próprio `ndarray`).
     """
-    raise NotImplementedError("issue #3: medir_tempos")
+    return {
+        "laço": cronometrar(converter_laco, contagens, k=k),
+        "compreensão": cronometrar(converter_compreensao, contagens, k=k),
+        "map+lambda": cronometrar(converter_map, contagens, k = k),
+        "vetorizado": cronometrar(converter_vetorizado, contagens, k=k)
+    }
