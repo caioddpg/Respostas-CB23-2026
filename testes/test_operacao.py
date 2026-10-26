@@ -21,6 +21,16 @@ class TestBisseccaoExemplo(unittest.TestCase):
 # Acrescente abaixo as suas classes de teste, começando pelos testes de regressão da
 # issue #9 (escreva-os ANTES de corrigir o defeito e confirme que falham).
 
+class TestMetododeNewton(unittest,Testcase):
+    def test_gaussiana(self):
+
+        def flat(x:float):
+            return math.exp(-(1/x))
+        c = 0.35
+        f = lambda x : c - flat(x)
+        newton = Newton()
+        res_raiz = newton.encontrar(f,0.01,0.40)
+
 
 if __name__ == "__main__":
     unittest.main()
